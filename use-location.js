@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useEvent } from "./react-deps.js";
+import { useSyncExternalStore, useEvent } from "./deps/preact.js";
 import { absolutePath, relativePath } from "./paths.js";
 
 /**

@@ -1,30 +1,17 @@
-import * as React from "react";
-
-// React.useInsertionEffect is not available in React <18
-const {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useInsertionEffect: useBuiltinInsertionEffect,
-} = React;
-
+import { useState, useLayoutEffect, useEffect, useRef } from "preact/hooks";
 export {
-  useState,
-  useContext,
-  createContext,
   isValidElement,
+  createContext,
   cloneElement,
   createElement,
   Fragment,
-  forwardRef,
-} from "react";
-
-// To resolve webpack 5 errors, while not presenting problems for native,
-// we copy the approaches from https://github.com/TanStack/query/pull/3561
-// and https://github.com/TanStack/query/pull/3601
-// ~ Show this aging PR some love to remove the need for this hack:
-//   https://github.com/facebook/react/pull/25231 ~
-export { useSyncExternalStore } from "./use-sync-external-store.js";
+} from "preact";
+export {
+  useLayoutEffect as useIsomorphicLayoutEffect,
+  useLayoutEffect as useInsertionEffect,
+  useState,
+  useContext,
+} from "preact/hooks";
 
 // Copied from:
 // https://github.com/facebook/react/blob/main/packages/shared/ExecutionEnvironment.js
@@ -34,32 +21,56 @@ const canUseDOM = !!(
   typeof window.document.createElement !== "undefined"
 );
 
-// Copied from:
-// https://github.com/reduxjs/react-redux/blob/master/src/utils/useIsomorphicLayoutEffect.ts
-// "React currently throws a warning when using useLayoutEffect on the server.
-// To get around it, we can conditionally useEffect on the server (no-op) and
-// useLayoutEffect in the browser."
-export const useIsomorphicLayoutEffect = canUseDOM
-  ? useLayoutEffect
-  : useEffect;
+// TODO: switch to `export { useSyncExternalStore } from "preact/compat"` once we update Preact to >= 10.11.3
+function is(x, y) {
+  return (x === y && (x !== 0 || 1 / x === 1 / y)) || (x !== x && y !== y);
+}
+export function useSyncExternalStore(subscribe, getSnapshot, getSSRSnapshot) {
+  if (getSSRSnapshot && !canUseDOM) getSnapshot = getSSRSnapshot;
+  const value = getSnapshot();
 
-// useInsertionEffect is already a noop on the server.
-// See: https://github.com/facebook/react/blob/main/packages/react-server/src/ReactFizzHooks.js
-export const useInsertionEffect =
-  useBuiltinInsertionEffect || useIsomorphicLayoutEffect;
+  const [{ _instance }, forceUpdate] = useState({
+    _instance: { _value: value, _getSnapshot: getSnapshot },
+  });
+
+  useLayoutEffect(() => {
+    _instance._value = value;
+    _instance._getSnapshot = getSnapshot;
+
+    if (!is(_instance._value, getSnapshot())) {
+      forceUpdate({ _instance });
+    }
+  }, [subscribe, value, getSnapshot]);
+
+  useEffect(() => {
+    if (!is(_instance._value, _instance._getSnapshot())) {
+      forceUpdate({ _instance });
+    }
+
+    return subscribe(() => {
+      if (!is(_instance._value, _instance._getSnapshot())) {
+        forceUpdate({ _instance });
+      }
+    });
+  }, [subscribe]);
+
+  return value;
+}
+
+// provide forwardRef stub for preact
+export function forwardRef(component) {
+  return component;
+}
 
 // Userland polyfill while we wait for the forthcoming
 // https://github.com/reactjs/rfcs/blob/useevent/text/0000-useevent.md
-// Note: "A high-fidelity polyfill for useEvent is not possible because
+// Note: "A high-fidelty polyfill for useEvent is not possible because
 // there is no lifecycle or Hook in React that we can use to switch
 // .current at the right timing."
 // So we will have to make do with this "close enough" approach for now.
 export const useEvent = (fn) => {
   const ref = useRef([fn, (...args) => ref[0](...args)]).current;
-  // Per Dan Abramov: useInsertionEffect executes marginally closer to the
-  // correct timing for ref synchronization than useLayoutEffect on React 18.
-  // See: https://github.com/facebook/react/pull/25881#issuecomment-1356244360
-  useInsertionEffect(() => {
+  useLayoutEffect(() => {
     ref[0] = fn;
   });
   return ref[1];

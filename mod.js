@@ -13,7 +13,7 @@ import {
   useIsomorphicLayoutEffect,
   useEvent,
   useInsertionEffect,
-} from "./react-deps.js";
+} from "./deps/preact.js";
 
 /*
  * Router and router context. Router is a lightweight object that represents the current
